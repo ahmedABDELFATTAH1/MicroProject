@@ -4,19 +4,22 @@
 LiquidCrystal_I2C lcd(0x27,2,1,0,4,5,6,7,3,POSITIVE);
 Servo gateEnter;
 Servo gateExit;
-////////////
+/////////////
 int gateEnterpin=3;
 int gateExitpin=5;
-int ledpins[]={1,2,3,4,5};//will be modified
 int flamepin=1;
 int spotssensors[]={A2,A3,A4,A5};
 int entersensor=A0;
 int exitsensor=A1;
 int CounterSpots;
+int PrevCounterSpots;
 int entergateangle;
 int exitgateangle;
+int prevsoptCount;
 int detectionvalueGates;
 int detectionvalueSpots;
+int timegateopned;
+int timegateclosed;
 ////////////////
 void setup() {
 gateEnter.attach(gateEnterpin);
@@ -25,146 +28,149 @@ pinMode(flamepin,INPUT);
 pinMode(entersensor,INPUT);
 pinMode(exitsensor,INPUT);
 for(int i=0;i<4;i++)
-{
-  
-   pinMode(spotssensors[i],INPUT);
-   pinMode(ledpins[i],OUTPUT);  
- 
+{  
+   pinMode(spotssensors[i],INPUT); 
 }
- pinMode(ledpins[4],OUTPUT); 
- CounterSpots=0;  
- entergateangle=1;
- exitgateangle=1;
- detectionvalueGates=1010;
- detectionvalueSpots=1010;
+ timegateopned=1000;
+ timegateclosed=1000;
+ entergateangle=0;
+ exitgateangle=90;
+ detectionvalueGates=300;
+ detectionvalueSpots=500;
+ lcd.begin(16,2);
  lcd.clear();
  lcd.setCursor(0,0);
- lcd.print("HELLO PARKING");
- delay(2000);
+ Serial.begin(9600); 
 }
 
-
-
-void loop() {
-  
-CounterSpots=0;
-if(!carDetection(entersensor,detectionvalueGates))
-{
-  gateEnter.write(0);
-}
-if(!carDetection(exitsensor,detectionvalueGates))
-{
-  gateExit.write(0);
+void loop() { 
+  prevsoptCount=CounterSpots;
+  timegateopned=millis()-timegateopned; 
+   timegateclosed=millis()-timegateclosed;      
+  CounterSpots=0; // number of parked places
+if(!carDetection(entersensor,detectionvalueGates)&&timegateopned>=1000)  // if no car is near to enter gate
+{      
+      entergateangle=90;
+      gateEnter.write(entergateangle);        
   
 }
-  lcd.clear();  
-  lcd.setCursor(0,0); 
-  String AvailableSpots=""; 
-  for(int i=0;i<4;i++)
-  {
-    int sensorvalue=analogRead(spotssensors[i]);    
+
+if(!carDetection(exitsensor,detectionvalueGates)&&timegateclosed>=1000)   // if no car is near to exit gate
+{       
+        exitgateangle=0;
+        gateExit.write(exitgateangle);             
+  
+}
+for(int i=0;i<4;i++)
+  {    
     if(carDetection(spotssensors[i],detectionvalueSpots))
-    {
-      CounterSpots++;
-      digitalWrite(ledpins[i],HIGH);     
-      
+    {      
+      CounterSpots++;        
+    }   
+  } 
+  if(CounterSpots!=prevsoptCount)
+  {
+    if(CounterSpots==4){   
+     lcd.clear();
+     lcd.setCursor(0,0);
+     lcd.print("Parking is FULL");    
     }
     else{      
-           digitalWrite(ledpins[i],LOW);   
-           AvailableSpots+=String(i+1)+",";   
-      }     
-  }
-
-  if(CounterSpots<4)
-  {
+     lcd.clear();
+     lcd.setCursor(0,0);
+     lcd.print("Available Spots");
+      
+      }   
     
-    lcd.print("Available spots");
-    lcd.setCursor(1,0);    
-    lcd.print(AvailableSpots);
-    
-  }
-  else{   
-     lcd.print("Parking is FULL");    
-    } 
-
+   }
+   
+  
+//  if there is a near car to enter AND there is available place
    if(carDetection(entersensor,detectionvalueGates)&&CounterSpots<4)
    {
-        openEnterGate();
+    //  digitalWrite(ledspin,HIGH);
+        openEnterGate();  // open enter gate
+      
    } 
-    
-    if(carDetection(exitsensor,detectionvalueGates)&&CounterSpots<4)
+//  if there is a near car to exit gate
+    if(carDetection(exitsensor,detectionvalueGates))
    {
-      
-     openExitGate();
-  
+     // digitalWrite(ledspin,LOW); 
+     openExitGate();  // open exit gate    
    } 
 }
 
-
-
-void openEnterGate()
-{
-    for(entergateangle;entergateangle<=90;entergateangle+=10)
-    {
-      gateEnter.write(entergateangle);                
-      delay(100);
-      if(carDetection(exitsensor,detectionvalueGates))
-      {
-        openBoth();        
-      }
-      
-    }     
-     
- } 
-
-void openExitGate()
-{
-  
- for(exitgateangle;exitgateangle<=90;exitgateangle+=10)
-    {
-        gateExit.write(exitgateangle);               
-        delay(100);
-     if(carDetection(entersensor,detectionvalueGates))
-      {
-        openBoth();        
-      }     
-    }    
-   
-}
-
-void openBoth()
-{  
-
-while(exitgateangle<90||entergateangle<90)
-{
-  if(exitgateangle<90)
-  {
-    exitgateangle+=10;
-    gateExit.write(exitgateangle); 
-  }
-   if(entergateangle<90)
-  {
-    entergateangle+=10;
-    gateEnter.write(exitgateangle); 
-  } 
-  
-}  
-  
-}
-
+// end void loop
 bool carDetection(int sensor,int detectvalue)
 {
  return (analogRead(sensor)<detectvalue); 
 }
 
 
-bool checkFlame()
+void openEnterGate()
+{  
+    for(entergateangle;entergateangle>0;entergateangle-=10)
+    {      
+      gateEnter.write(entergateangle);           
+      delay(10);   
+       if(carDetection(exitsensor,detectionvalueGates))
+       {
+        openboth();
+        }      
+    }   
+    
+        timegateopned=millis();
+ } 
+
+void openExitGate()
+{ 
+ for(exitgateangle;exitgateangle<90;exitgateangle+=10)
+    {        
+        gateExit.write(exitgateangle);               
+        delay(10); 
+       if(carDetection(entersensor,detectionvalueGates))
+       {
+        openboth();
+       }         
+    } 
+    timegateclosed=millis();        
+    
+}
+
+void openboth()
+{
+  while(exitgateangle<90&&entergateangle>0)
+  {
+     gateExit.write(exitgateangle);   
+      gateEnter.write(entergateangle);
+       exitgateangle+=10;
+       entergateangle-=10;   
+  } 
+    timegateclosed=millis();
+    timegateopned=millis();  
+}
+
+
+bool trueFlame()
 {
  return (digitalRead(flamepin));    
 }
 
 void flameLogic()
 {  
-//ba3deen b2a ;
-  
+gateEnter.write(90);
+gateExit.write(0);
+lcd.clear();
+lcd.setCursor(0,0);
+lcd.print("FIRE !!");
+lcd.setCursor(1,0);
+lcd.print("RUN FOREST RUN");
+while(trueFlame())
+{     
+//   digitalWrite(ledspin,HIGH);  
+   delay(200);  
+  // digitalWrite(ledspin,LOW); 
+   delay(200);
+}
+ 
 }
